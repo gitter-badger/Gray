@@ -1,0 +1,1756 @@
+return {{}; {};
+  ["class.lua"] = {{}, [[local _class = nil
+local _classname = nil
+function table.deepcopy(orig)
+    local orig_type = type(orig)
+    local copy
+    if orig_type == 'table' then
+        copy = {}
+        for orig_key, orig_value in next, orig, nil do
+            copy[table.deepcopy(orig_key)] = table.deepcopy(orig_value)
+        end
+        setmetatable(copy, getmetatable(orig))
+    else
+        copy = orig
+    end
+    return copy
+end
+_G.class = function(name)
+  local _name = name
+  _classname = name
+  _class = {}
+  return function(structure)
+    _class = structure
+    _class.__call = function(self, ...)
+      local inst = table.deepcopy(self)
+      if inst[_name] then inst[_name](inst, ...) end
+      setmetatable(inst, inst)
+      return inst
+    end
+    setmetatable(_class, _class)
+    _G[_classname] = _class
+  end
+end
+_G.extends = function(name)
+  local _name = _classname
+  for i, v in pairs(table.deepcopy(_G[name])) do
+    _class[i] = v
+  end
+  _class[_name] = _G[name][name]
+  return function(structure)
+    _class[_classname] = structure[name]
+    for i, v in pairs(structure) do
+      _class[i] = v
+    end
+    _class.__call = function(self, ...)
+      local inst = table.deepcopy(self)
+      if inst[_name] then inst[_name](inst, ...) end
+      setmetatable(inst, inst)
+      return inst
+    end
+    setmetatable(_class, _class)
+    _G[_classname] = _class
+  end
+end
+]]};
+  ["gray/graphics/Canvas.lua"] = {{"class.lua", "gray/graphics/AppCanvas.lua", "gray/ui/Alignment.lua"}, [[function math.clamp(n, min, max)
+  return n < min and min or (n > max and max or n)
+end
+function math.round(n)
+  return math.floor(n + 0.5)
+end
+class "Canvas" {
+  x1 = 0;
+  y1 = 0;
+  x2 = 0;
+  y2 = 0;
+  width = 0;
+  height = 0;
+  xScroll = 0;
+  yScroll = 0;
+  calcBounds = function(self, x1, y1, x2, y2, alignment, minwidth, minheight)
+    local xdiff = 0
+    local ydiff = 0
+    if x2 == x1 - 1 then
+      x2 = x1 + self.width
+    end
+    if y2 == y1 - 1 then
+      y2 = y1 + self.height
+    end
+    if x2 == x1 - 2 then
+      x2 = x1 + minwidth
+    end
+    if y2 == y1 - 2 then
+      y2 = y1 + minheight
+    end
+    if bit.band(alignment, 5) == 5 then
+      xdiff = self.width * 0.25 - (x2 - x1) * 0.5
+    elseif bit.band(alignment, 9) == 9 then
+      xdiff = self.width * 0.75 - (x2 - x1) * 0.5
+    elseif bit.band(alignment, 1) == 1 then
+      xdiff = self.width * 0.5 - (x2 - x1) * 0.5
+    elseif bit.band(alignment, 8) == 8 then
+      xdiff = self.width - (x2 - x1)
+    end
+    if bit.band(alignment, 18) == 18 then
+      ydiff = self.height * 0.25 - (y2 - y1) * 0.5
+    elseif bit.band(alignment, 34) == 34 then
+      ydiff = self.height * 0.75 - (y2 - y1) * 0.5
+    elseif bit.band(alignment, 2) == 2 then
+      ydiff = self.height * 0.5 - (y2 - y1) * 0.5
+    elseif bit.band(alignment, 32) == 32 then
+      ydiff = self.height - (y2 - y1)
+    end
+    return math.ceil(math.clamp(x1 + xdiff + self.x1 - self.xScroll - 1, self.x1, self.x2)),
+           math.ceil(math.clamp(y1 + ydiff + self.y1 - self.yScroll - 1, self.y1, self.y2)),
+           math.ceil(math.clamp(x2 + xdiff + self.x1 - self.xScroll - 1, self.x1, self.x2)),
+           math.ceil(math.clamp(y2 + ydiff + self.y1 - self.yScroll - 1, self.y1, self.y2))
+  end;
+  drawBox = function(self, x1, y1, x2, y2, color, alignment, keeptext)
+    if type(y1) == "table" then
+      keeptext = color
+      alignment = y2
+      color = x2
+      y2 = y1.y
+      x2 = y1.x
+      y1 = x1.y
+      x1 = x1.x
+    elseif type(x1) == "table" then
+      keeptext = y2
+      alignment = x2
+      color = y1
+      y2 = x1.y2
+      x2 = x1.x2
+      y1 = x1.y1
+      x1 = x1.x1
+    end
+    if color == colors.transparent then return nil end
+    for y = y1, y2 - 1 do
+      for x = x1, x2 - 1 do
+        AppCanvas.setPixel(x, y, color)
+        if not keeptext then AppCanvas.setTextColor(x, y, 0) end
+      end
+    end
+  end;
+  drawText = function(self, x1, y1, x2, y2, text, textcolor, textAlignment, alignment, cursor, selectioncolor, selection, wrap, isfield)
+    if type(y1) == "table" then
+      isfield = selection
+      wrap = selectioncolor
+      selection = cursor
+      selectioncolor = alignment
+      cursor = textAlignment
+      alignment = textcolor
+      textAlignment = text
+      textcolor = y2
+      text = x2
+      y2 = y1.y
+      x2 = y1.x
+      y1 = x1.y
+      x1 = x1.x
+    elseif type(x1) == "table" then
+      isfield = selectioncolor
+      wrap = cursor
+      selection = alignment
+      selectioncolor = textAlignment
+      cursor = textcolor
+      alignment = text
+      textAlignment = y2
+      textcolor = x2
+      text = y1
+      y2 = x1.y2
+      x2 = x1.x2
+      y1 = x1.y1
+      x1 = x1.x1
+    end
+    cursor = cursor or 0
+    selection = selection and selection - 1 or cursor
+    local cx = 0
+    local cy = 0
+    local chome = 0
+    local cend = 0
+    local width = isfield and x2 - x1 - 1 or x2 - x1
+    local height
+    local lines
+    if wrap then
+      height = y2 - y1
+      text = text:sub(1, width * height + 1)
+      lines = #text / width
+    else
+      height = 1
+      text = text:sub(1, width + 1)
+      lines = 1
+    end
+    if x2 == x1 - 1 then
+      x2 = x1 + self.width
+    end
+    if y2 == y1 - 1 then
+      y2 = y1 + self.height
+    end
+    local alignX
+    local alignY
+    if bit.band(textAlignment, 5) == 5 then
+      alignX = function(w)
+        return width * 0.25 - w * 0.5
+      end
+    elseif bit.band(textAlignment, 9) == 9 then
+      alignX = function(w)
+        return width * 0.75 - w * 0.5
+      end
+    elseif bit.band(textAlignment, 1) == 1 then
+      alignX = function(w)
+        return width * 0.5 - w * 0.5
+      end
+    elseif bit.band(textAlignment, 8) == 8 then
+      alignX = function(w)
+        return width - w
+      end
+    else
+      alignX = function(w)
+        return 0
+      end
+    end
+    if bit.band(textAlignment, 18) == 18 then
+      alignY = function(h)
+        return height * 0.25 - h * 0.5
+      end
+    elseif bit.band(textAlignment, 34) == 34 then
+      alignY = function(h)
+        return height * 0.75 - h * 0.5
+      end
+    elseif bit.band(textAlignment, 2) == 2 then
+      alignY = function(h)
+        return height * 0.5 - h * 0.5
+      end
+    elseif bit.band(textAlignment, 32) == 32 then
+      alignY = function(h)
+        return height - h
+      end
+    else
+      alignY = function(h)
+        return 0
+      end
+    end
+    local ti = 1
+    for y = 1, height do
+      local tl = #text - ti + 1
+      if tl > width then tl = width end
+      local tx = math.ceil(alignX(tl) + x1)
+      local ty = math.ceil(alignY(lines) + y + y1 - 1)
+      if ty > y2 then
+        break
+      end
+      if cursor >= ti and cursor <= ti + tl then
+        chome = ti
+        cend = ti + tl
+        cx = tx + cursor - ti
+        cy = ty
+      end
+      for x = 1, width do
+        local sx = tx + x - 1
+        if (cursor <= ti and selection >= ti) or (selection < ti and cursor > ti) then
+          AppCanvas.setPixel(sx, ty, selectioncolor)
+        end
+        AppCanvas.setTextColor(sx, ty, textcolor)
+        AppCanvas.setChar(sx, ty, text:sub(ti, ti))
+        ti = ti + 1
+        if ti > #text then
+          return cx, cy, chome, cend
+        end
+      end
+      if y > lines then
+        break
+      end
+    end
+    return cx, cy, chome, cend
+  end;
+}
+]]};
+  ["gray/util/Coroutine.lua"] = {{"class.lua"}, [[class "Coroutine" {
+  coroutines = {};
+  co = "fucj";
+  Coroutine = function(self, func)
+    self.co = coroutine.create(func)
+  end;
+  start = function(self)
+    table.insert(Coroutine.coroutines, self)
+  end;
+  stop = function(self)
+    for i, c in Coroutine.coroutines do
+      if c == self then
+        table.remove(Coroutine.coroutines, i)
+        break
+      end
+    end
+  end;
+  yield = coroutine.yield;
+  step = function()
+    for i, c in ipairs(Coroutine.coroutines) do
+      if not coroutine.resume(c.co) then
+        table.remove(Coroutine.coroutines, i)
+      end
+    end
+  end;
+}
+]]};
+  ["gray/math/vec4.lua"] = {{"class.lua"}, [[class "vec4" {
+  vec4 = function(self, x, y, z, w)
+    self.x = x or 0
+    self.y = y or 0
+    self.z = z or 0
+    self.w = w or 0
+  end;
+  dot = function(self, o)
+    return self.x * o.x + self.y * o.y + self.z * o.z + self.w * o.w
+  end;
+  cross = function(self, o)
+    return vec4(
+      self.y * o.z - self.z * o.y,
+      self.z * o.x - self.x * o.z,
+      self.x * o.y - self.y * o.x,
+      self.w
+    )
+  end;
+  __length = function(self)
+    return math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w)
+  end;
+  normalize = function(self)
+    return self * 1 / self:length()
+  end;
+  round = function(self, nTolerance)
+      nTolerance = nTolerance or 1
+      return vec4(
+        math.floor((self.x + (nTolerance * 0.5)) / nTolerance) * nTolerance,
+        math.floor((self.y + (nTolerance * 0.5)) / nTolerance) * nTolerance,
+        math.floor((self.z + (nTolerance * 0.5)) / nTolerance) * nTolerance
+      )
+  end;
+  __index = function(self, h)
+    if h == 1 then
+      return self.x
+    elseif h == 2 then
+      return self.y
+    elseif h == 3 then
+      return self.z
+    elseif h == 4 then
+      return self.w
+    end
+  end;
+  __tostring = function(self)
+    return self.x .. ", " .. self.y .. ", " .. self.z .. ", " .. self.w
+  end;
+  __add = function(self, o)
+    if type(o) == "table" then
+      return vec4(
+        self.x + o.x,
+        self.y + o.y,
+        self.z + o.z
+      )
+    elseif type(o) == "number" then
+      return vec4(
+        self.x + o,
+        self.y + o,
+        self.z + o
+      )
+    end
+  end;
+  __sub = function( self, o )
+    if type(o) == "table" then
+      return vec4(
+        self.x - o.x,
+        self.y - o.y,
+        self.z - o.z
+      )
+    elseif type(o) == "number" then
+      return vec4(
+        self.x - o,
+        self.y - o,
+        self.z - o,
+        self.w - o
+      )
+    end
+  end;
+  __mul = function( self, m )
+    --if type(self) ~= "table" then return commit(suicide) end
+    if type(m) == "table" and m.x then
+      return vec4(
+        self.x * m.x,
+        self.y * m.y,
+        self.z * m.z,
+        self.w * m.w
+      )
+    elseif type(m) == "number" then
+      return vec4(
+        self.x * m,
+        self.y * m,
+        self.z * m,
+        self.w * m
+      )
+    end
+  end;
+  __div = function( self, m )
+    if type(m) == "table" then
+      return vec4(
+        self.x / m.x,
+        self.y / m.y,
+        self.z / m.z,
+        self.w / m.w
+      )
+    elseif type(m) == "number" then
+      return vec4(
+        self.x / m,
+        self.y / m,
+        self.z / m,
+        self.w / m
+      )
+    end
+  end;
+  __unm = function( self )
+    return vec4(
+      -self.x,
+      -self.y,
+      -self.z,
+      -self.w
+    )
+  end;
+}
+]]};
+  ["gray/graphics/AppCanvas.lua"] = {{"class.lua", "gray/graphics/Canvas.lua"}, [[term.width, term.height = term.getSize()
+class "AppCanvas" {
+  term = term.current();
+  x1 = 1;
+  y1 = 1;
+  x2 = term.width + 1;
+  y2 = term.height + 1;
+  width = term.width;
+  height = term.height;
+  hscroll = 0;
+  vscroll = 0;
+  pixels = {};
+  tcolors = {};
+  chars = {};
+  cursorx;
+  cursory;
+  AppCanvas = function(self)
+    error("Cannot instantiate static class AppCanvas")
+  end;
+  calcBounds = function(self, x1, y1, x2, y2, alignment, minwidth, minheight)
+    local xdiff = 0
+    local ydiff = 0
+    if x2 == x1 - 1 then
+      x2 = x1 + self.width
+    end
+    if y2 == y1 - 1 then
+      y2 = y1 + self.height
+    end
+    if x2 == x1 - 2 then
+      x2 = x1 + minwidth
+    end
+    if y2 == y1 - 2 then
+      y2 = y1 + minheight
+    end
+    if bit.band(alignment, 5) == 5 then
+      xdiff = self.width * 0.25 - (x2 - x1) * 0.5
+    elseif bit.band(alignment, 9) == 9 then
+      xdiff = self.width * 0.75 - (x2 - x1) * 0.5
+    elseif bit.band(alignment, 1) == 1 then
+      xdiff = self.width * 0.5 - (x2 - x1) * 0.5
+    elseif bit.band(alignment, 8) == 8 then
+      xdiff = self.width - (x2 - x1)
+    end
+    if bit.band(alignment, 18) == 18 then
+      ydiff = self.height * 0.25 - (y2 - y1) * 0.5
+    elseif bit.band(alignment, 34) == 34 then
+      ydiff = self.height * 0.75 - (y2 - y1) * 0.5
+    elseif bit.band(alignment, 2) == 2 then
+      ydiff = self.height * 0.5 - (y2 - y1) * 0.5
+    elseif bit.band(alignment, 32) == 32 then
+      ydiff = self.height - (y2 - y1)
+    end
+    return math.ceil(math.clamp(x1 + xdiff + self.x1 - 1, self.x1, self.x2)),
+           math.ceil(math.clamp(y1 + ydiff + self.y1 - 1, self.y1, self.y2)),
+           math.ceil(math.clamp(x2 + xdiff + self.x1 - 1, self.x1, self.x2)),
+           math.ceil(math.clamp(y2 + ydiff + self.y1 - 1, self.y1, self.y2))
+  end;
+  setPixel = function(x, y, c)
+    if c ~= colors.transparent then
+      if not AppCanvas.pixels[y] then AppCanvas.pixels[y] = {} end
+      AppCanvas.pixels[y][x] = c
+    end
+  end;
+  setTextColor = function(x, y, c)
+    if not AppCanvas.tcolors[y] then AppCanvas.tcolors[y] = {} end
+    AppCanvas.tcolors[y][x] = c
+  end;
+  setChar = function(x, y, c)
+    if not AppCanvas.chars[y] then AppCanvas.chars[y] = {} end
+    AppCanvas.chars[y][x] = c
+  end;
+  setCursorBlink = function(x, y)
+    AppCanvas.cursorx = x
+    AppCanvas.cursory = y
+  end;
+  clear = function()
+    AppCanvas.pixels = {}
+    AppCanvas.tcolors = {}
+    AppCanvas.chars = {}
+  end;
+  redraw = function()
+    for y = AppCanvas.y1, AppCanvas.y2 do
+      local pcol = AppCanvas.pixels[y]
+      local tcol = AppCanvas.tcolors[y]
+      local col = AppCanvas.chars[y]
+      AppCanvas.term.setCursorPos(AppCanvas.x1, y)
+      for x = AppCanvas.x1, AppCanvas.x2 do
+        AppCanvas.term.setBackgroundColor(pcol and (pcol[x] or colors.black) or colors.black)
+        local tc = tcol and tcol[x] or 0
+        if tc == 0 then
+          AppCanvas.term.write(" ")
+        else
+          AppCanvas.term.setTextColor(tc)
+          AppCanvas.term.write(col and (col[x] or " ") or " ")
+        end
+      end
+    end
+    AppCanvas.term.setVisible(true)
+    if AppCanvas.cursorx then
+      AppCanvas.term.setCursorPos(AppCanvas.cursorx, AppCanvas.cursory)
+      AppCanvas.term.setCursorBlink(true)
+    else
+      AppCanvas.term.setCursorBlink(false)
+    end
+    AppCanvas.term.setVisible(false)
+  end;
+}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+]]};
+  ["gray/ui/widget/TextField.lua"] = {{"class.lua", "gray/ui/widget/Widget.lua"}, [[class "TextField" extends "Widget" {
+  clickedColor = colors.cyan;
+  selectionColor = colors.lightBlue;
+  color = colors.lightGray;
+  textColor = colors.gray;
+  textAlignment = 0;
+  focused = false;
+  multiline = false;
+  selecting = false;
+  selection = 0;
+  clicked = false;
+  hscroll = 0;
+  cursor = 1;
+  chome = 0;
+  cend = 0;
+  text = "";
+  hint = "";
+  TextField = function(self, hint)
+    self.hint = hint
+  end;
+  onKey = function(self, key, held)
+    if key == keys.left then
+      if self.selecting and not self.shiftPressed then
+        self.selecting = false
+        if self.selection < self.cursor then
+          self.cursor = self.selection
+        end
+      elseif self.shiftPressed and not self.selecting then
+        self.selection = self.cursor
+        self.selecting = true
+        if self.cursor > 1 then
+          self.cursor = self.cursor - 1
+        end
+      elseif self.cursor > 1 then
+        self.cursor = self.cursor - 1
+      end
+    elseif key == keys.right then
+      if self.selecting and not self.shiftPressed then
+        self.selecting = false
+        if self.selection > self.cursor then
+          self.cursor = self.selection
+        end
+      elseif self.shiftPressed and not self.selecting then
+        self.selection = self.cursor
+        self.selecting = true
+        if self.cursor < #self.text + 1 then
+          self.cursor = self.cursor + 1
+        end
+      elseif self.cursor < #self.text + 1 then
+        self.cursor = self.cursor + 1
+      end
+    elseif key == keys.leftShift or key == keys.rightShift then
+      self.shiftPressed = true
+    elseif key == keys.enter and self.multiline then
+      if self.selecting then
+        self.selecting = false
+        if self.selection > self.cursor then
+          self.text = self.text:sub(1, self.cursor - 1) .. char .. self.text:sub(self.selection)
+          self.cursor = self.cursor - 1
+        else
+          self.text = self.text:sub(1, self.selection - 1) .. char .. self.text:sub(self.cursor)
+          self.cursor = self.selection + 1
+        end
+      else
+        self.text = self.text:sub(1, self.cursor - 1) .. char .. self.text:sub(self.cursor)
+        self.cursor = self.cursor + 1
+      end
+    elseif key == keys.backspace then
+      if self.selecting then
+        self.selecting = false
+        if self.selection > self.cursor then
+          self.text = self.text:sub(1, self.cursor - 1) .. self.text:sub(self.selection)
+        else
+          self.text = self.text:sub(1, self.selection - 1) .. self.text:sub(self.cursor)
+          self.cursor = self.selection
+        end
+      elseif self.cursor > 1 then
+        self.text = self.text:sub(1, self.cursor - 2) .. self.text:sub(self.cursor)
+        self.cursor = self.cursor - 1
+      end
+    elseif key == keys.delete and self.cursor < #self.text + 1 then
+      if self.selecting then
+        self.selecting = false
+        if self.selection > self.cursor then
+          self.text = self.text:sub(1, self.cursor - 1) .. self.text:sub(self.selection)
+        else
+          self.text = self.text:sub(1, self.selection - 1) .. self.text:sub(self.cursor)
+          self.cursor = self.selection
+        end
+      else
+        self.text = self.text:sub(1, self.cursor - 1) .. self.text:sub(self.cursor + 1)
+      end
+    elseif key == keys.home then
+      if self.selecting and not self.shiftPressed then
+        self.selecting = false
+      elseif self.shiftPressed and not self.selecting then
+        self.selection = self.cursor
+        self.selecting = true
+      end
+      self.cursor = self.chome
+    elseif key == keys["end"] then
+      if self.selecting and not self.shiftPressed then
+        self.selecting = false
+      elseif self.shiftPressed and not self.selecting then
+        self.selection = self.cursor
+        self.selecting = true
+      end
+      self.cursor = self.cend
+    end
+  end;
+  onKeyUp = function(self, key)
+    if key == keys.leftShift or key == keys.rightShift then
+      self.shiftPressed = false
+    end
+  end;
+  onChar = function(self, char)
+    if self.selecting then
+      self.selecting = false
+      if self.selection > self.cursor then
+        self.text = self.text:sub(1, self.cursor - 1) .. char .. self.text:sub(self.selection)
+        self.cursor = self.cursor + 1
+      else
+        self.text = self.text:sub(1, self.selection - 1) .. char .. self.text:sub(self.cursor)
+        self.cursor = self.selection + 1
+      end
+    else
+      self.text = self.text:sub(1, self.cursor - 1) .. char .. self.text:sub(self.cursor)
+      self.cursor = self.cursor + 1
+    end
+  end;
+  onClick = function(self, button, x, y)
+    if not self.multiline then
+      self.cursor = math.min(x - self.hscroll + 2, #self.text + 1)
+      self.selecting = true
+      self.selection = self.cursor
+    end
+  end;
+  onClickUp = function(self, button, x, y, inside)
+    if self.clicked then
+      if inside then
+        self.focused = true
+      else
+        self.parent.focused = nil
+      end
+    end
+    self.clicked = false
+  end;
+  onDrag = function(self, button, x, y, inside)
+    if not self.multiline then
+      self.cursor = math.min(x - self.hscroll + 2, #self.text + 1)
+    end
+  end;
+  onFocus = function(self)
+    self.clicked = true
+  end;
+  onLoseFocus = function(self)
+    self.focused = false
+    AppCanvas.setCursorBlink(false, false)
+  end;
+  draw = function(self, canvas)
+    local x1, y1, x2, y2 = canvas:calcBounds(self.x1, self.y1, self.x2, self.y2, self.alignment, 0, 0)
+    self.bounds = {x1 = x1, y1 = y1, x2 = x2, y2 = y2}
+    if self.focused then
+      canvas:drawBox(self, self.clicked and self.clickedColor or self.color, self.alignment)
+    else
+      canvas:drawBox(self, self.clicked and self.clickedColor or self.textColor, self.alignment)
+    end
+    local cx, cy = 0, 0
+    if #self.text ~= 0 then
+      if self.selecting and self.focused then
+        cx, cy, self.chome, self.cend = canvas:drawText(self.bounds, self.text, self.focused and self.textColor or self.color, self.textAlignment, self.alignment, self.cursor, self.selectionColor, self.selection, self.multiline, true, self.hscroll)
+      else
+        cx, cy, self.chome, self.cend = canvas:drawText(self.bounds, self.text, self.focused and self.textColor or self.color, self.textAlignment, self.alignment, self.cursor, self.selectionColor, self.cursor, self.multiline, true, self.hscroll)
+      end
+    else
+      cx, cy, self.chome, self.cend = canvas:drawText(self.bounds, self.hint, self.focused and self.textColor or self.color, self.textAlignment, self.alignment, self.cursor, self.selectionColor, self.cursor, self.multiline, true, self.hscroll, self.vscroll)
+    end
+    if self.focused then
+      AppCanvas.setCursorBlink(cx, cy)
+    end
+  end;
+}
+]]};
+  ["gray/util/TextUtils.lua"] = {{}, [[function textutils.contains(t, v)
+  for i = 1, #t do
+    if t[i] == v then
+      return true
+    end
+  end
+  return false
+end
+function textutils.startswith(str, start)
+  if str and start then
+    return string.sub(str, 1, string.len(start)) == start
+  else
+    return false
+  end
+end
+function textutils.split(inputstr, sep)
+  sep = sep or "%s"
+  local t = {}
+  local i = 1
+  for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
+    t[i] = str
+    i = i + 1
+  end
+  return t
+end
+function textutils.chars(str)
+  local c = {}
+  for i = 1, #str do
+    table.insert(c, str:sub(i, i))
+  end
+  return c
+end
+]]};
+  ["gray/ui/Alignment.lua"] = {{"class.lua"}, [[class "Alignment" {
+  centerHorizontal = 1;
+  centerVertical = 2;
+  center = 3;       -- 1 | 2
+  left = 6;         -- 2 | 5
+  right = 10;       -- 2 | 8
+  top = 17;         -- 1 | 16
+  bottom = 33;      -- 1 | 32
+  topLeft = 20;     -- 4 | 16
+  topRight = 24;    -- 8 | 16
+  bottomLeft = 36;  -- 4 | 32
+  bottomRight = 40; -- 8 | 32
+}
+]]};
+  ["gray/math/mat4x4.lua"] = {{"class.lua"}, [[class "mat4x4" {
+  [1] = vec4(1, 0, 0, 0);
+  [2] = vec4(0, 1, 0, 0);
+  [3] = vec4(0, 0, 1, 0);
+  [4] = vec4(0, 0, 0, 1);
+  translate = function(self, x, y, z, w)
+    if type(x) == "table" then
+      w = x.w or 1
+      z = x.z
+      y = x.y
+      x = x.x
+    end
+    self[4] = vec4(self[4].x + x, self[4].y + y, self[4].z + z, self[4].w * (w or 1));
+		return self;
+  end;
+  translation = function(x, y, z, w)
+    if type(x) == "table" then
+      w = x.w or 1
+      z = x.z
+      y = x.y
+      x = x.x
+    end
+    local m = mat4x4()
+    m[4] = vec4(x, y, z, w or 1);
+		return m;
+  end;
+  rotation = function(x, y, z)
+    if type(x) == "table" then
+      z = x.z
+      y = x.y
+      x = x.x
+    end
+    --local rotx = mat4x4()
+    --rotx[1] = vec4(1, 0, 0, 0)
+    --rotx[2] = vec4(0, math.cos(x), math.sin(x), 0)
+    --rotx[3] = vec4(0, -math.sin(x), math.cos(x), 0)
+    --rotx[4] = vec4(0, 0, 0, 1)
+    --local roty = mat4x4()
+    --roty[1] = vec4(math.cos(y), 0, -math.sin(y), 0)
+    --roty[2] = vec4(0, 1, 0, 0)
+    --roty[3] = vec4(-math.sin(y), 0, math.cos(y), 0)
+    --roty[4] = vec4(0, 0, 0, 1)
+    --local rotz = mat4x4()
+    --rotz[1] = vec4(math.cos(z), math.sin(z), 0, 0)
+    --rotz[2] = vec4(-math.sin(z), math.cos(z), 0, 0)
+    --rotz[3] = vec4(0, 0, 1, 0)
+    --rotz[4] = vec4(0, 0, 0, 1)
+    local rot = mat4x4()
+    rot[1] = vec4(math.cos(y) * math.cos(z), math.cos(y) * math.sin(z), -math.sin(z), 0)
+    rot[2] = vec4(math.cos(z) * math.sin(x) * math.sin(y) - math.cos(x) * math.sin(z), math.cos(x) * math.cos(z) + math.sin(x) * math.sin(y) * math.sin(z), math.cos(y) * math.sin(x), 0)
+    rot[3] = vec4(math.cos(x) * math.cos(z) * math.sin(y) + math.sin(x) * math.sin(z), math.cos(x) * math.sin(y) * math.sin(z) - math.cos(z) * math.sin(x), math.cos(x) * math.cos(y), 0)
+    rot[4] = vec4(0, 0, 0, 1)
+    return rot;
+  end;
+  perspective = function(fov, ratio, near, far)
+    local result = mat4x4()
+    local depth = far - near;
+    local h = 1 / math.tan(fov / 2)
+    local w = (h / ratio)
+    result[1] = vec4(w, 0, 0, 0)
+    result[2] = vec4(0, h, 0, 0)
+    result[3] = vec4(0, 0, far / depth, near * far / depth)
+    result[4] = vec4(0, 0, 1, 0)
+    return result
+  end;
+  __mul = function(self, m)
+    if m.x then -- Vector
+      local out = vec4()
+      local w = m.w and m.w or 1
+      out.x = m.x * self[1][1] + m.y * self[2][1] + m.z * self[3][1] + w * self[4][1]
+      out.y = m.x * self[1][2] + m.y * self[2][2] + m.z * self[3][2] + w * self[4][2]
+      out.z = m.x * self[1][3] + m.y * self[2][3] + m.z * self[3][3] + w * self[4][3]
+      out.w = m.x * self[1][4] + m.y * self[2][4] + m.z * self[3][4] + w * self[4][4]
+      if not out.w == 1 then
+        out.x = out.x / w
+        out.y = out.y / w
+        out.z = out.z / w
+      end
+      return out
+    elseif type(m) == "table" then -- Matrix
+      local out = mat4x4()
+		  out[1] = self[1] * m[1][1] + self[2] * m[1][2] + self[3] * m[1][3] + self[4] * m[1][4]
+		  out[2] = self[1] * m[2][1] + self[2] * m[2][2] + self[3] * m[2][3] + self[4] * m[2][4]
+		  out[3] = self[1] * m[3][1] + self[2] * m[3][2] + self[3] * m[3][3] + self[4] * m[3][4]
+		  out[4] = self[1] * m[4][1] + self[2] * m[4][2] + self[3] * m[4][3] + self[4] * m[4][4]
+      return out
+    else -- Number
+      local out = mat4x4()
+      out[1] = self[1] * m
+      out[2] = self[2] * m
+      out[3] = self[3] * m
+      out[4] = self[4] * m
+      return out
+    end
+  end;
+}
+class "mat4" extends "mat4x4" -- People have different styles
+]]};
+  ["gray/ui/widget/Widget.lua"] = {{"class.lua", "gray/graphics/Canvas.lua"}, [[colors.transparent = 0
+class "Widget" {
+  x = 1;
+  y = 1;
+  width = -2;
+  height = 1;
+  alignment = 0;
+  color = colors.transparent;
+  bounds = {};
+  parent;
+  __index = function(self, index)
+    if index == "x1" then
+      return self.x
+    elseif index == "y1" then
+      return self.y
+    elseif index == "x2" then
+      return self.x + self.width
+    elseif index == "y2" then
+      return self.y + self.height
+    end
+  end;
+  handleEvent = function(self, event, p1, p2, p3, p4, p5)
+    if event == "mouse_click" then
+      self:onClick(p1, p2 - self.x - 1, p3 - self.y - 1)
+    elseif event == "mouse_up" then
+      self:onClickUp(p1, p2 - self.x - 1, p3 - self.y - 1, p4)
+    elseif event == "mouse_drag" then
+      self:onDrag(p1, p2 - self.x - 1, p3 - self.y - 1, p4)
+    elseif event == "mouse_scroll" then
+      self:onScroll(p1, p2 - self.x - 1, p3 - self.y - 1)
+    elseif event == "key" then
+      self:onKey(p1, p2)
+    elseif event == "key_up" then
+      self:onKeyUp(p1)
+    elseif event == "char" then
+      self:onChar(p1)
+    end
+  end;
+  onClick = function(self, button, x, y) end;
+  onClickUp = function(self, button, x, y, inside) end;
+  onDrag = function(self, button, x, y, inside) end;
+  onScroll = function(self, direction, x, y) end;
+  onKey = function(self, key, held) end;
+  onKeyUp = function(self, key) end;
+  onChar = function(self, char) end;
+  onFocus = function(self) end;
+  onLoseFocus = function(self) end;
+  init = function(self) end;
+  update = function(self) end;
+  draw = function(self) end;
+}
+]]};
+  ["gray/io/Buffer.lua"] = {{"class.lua"}, [[class "Buffer" {
+  Buffer = function(self, array)
+    self.array = array or {}
+    self.pointer = 1
+  end,
+  put = function(self, ...)
+    for _, v in ipairs({...}) do
+      self.array[self.pointer] = v
+      self.pointer = self.pointer + 1
+    end
+  end,
+  putAll = function(self, ...)
+    for _, v in ipairs({...}) do
+      for _, c in ipairs(v) do
+        self.array[self.pointer] = c
+        self.pointer = self.pointer + 1
+      end
+    end
+  end,
+  get = function(self, pointer)
+    local r = self.array[pointer or self.pointer]
+    self.pointer = pointer and self.pointer or self.pointer + 1
+    return r
+  end,
+  clear = function(self)
+    self.array = {}
+    self.pointer = 1
+  end,
+  rewind = function(self)
+    self.pointer = 1
+  end,
+  getArray = function(self)
+    return self.array
+  end
+}
+]]};
+  ["gray/ui/widget/Dropdown.lua"] = {{"class.lua", "gray/ui/widget/Label.lua", "gray/ui/widget/ScrollLayout.lua"}, [[class "Dropdown" extends "Widget" {
+  dropLayout;
+  color = colors.gray;
+  textColor = colors.white;
+  textAlignment = Alignment.left;
+  text = "fags";
+  __index = function(self, index)
+    if index == "x1" or index == "x" then
+      return self.dropLayout.x
+    elseif index == "y1" or index == "y" then
+      return self.dropLayout.y - 1
+    elseif index == "x2" then
+      return self.dropLayout.x + self.dropLayout.width - 1
+    elseif index == "y2" then
+      return self.dropLayout.y
+    elseif index == "dropdownColor" then
+      return rawget(self.dropLayout, "color")
+    elseif index == "width" or index == "height" then
+      return rawget(self.dropLayout, index)
+    end
+  end;
+  __newindex = function(self, index, value)
+    if index == "y" then
+      self.dropLayout[index] = value + 1
+    elseif index == "x" or index == "width" or index == "height" then
+      self.dropLayout[index] = value
+    elseif index == "dropdownColor" then
+      self.dropLayout.color = value
+    else
+      rawset(self, index, value)
+    end
+  end;
+  Dropdown = function(self, text)
+    rawset(self, "x", nil)
+    rawset(self, "y", nil)
+    rawset(self, "width", nil)
+    rawset(self, "height", nil)
+    if text then self.text = text end
+    self.dropLayout = ScrollLayout()
+    self.dropLayout.dropdown = self
+    self.dropLayout:addWidget(ScrollBar())
+    self.dropLayout.handleEvent = function(self, event, p1, p2, p3, p4, p5)
+      if event == "mouse_scroll" then
+        if p1 < 0 and self.yScroll > 0 then
+          self.yScroll = self.yScroll + p1
+          return nil
+        elseif p1 > 0 and self.yScroll < self:resolveMaxYScroll() then
+          self.yScroll = self.yScroll + p1
+          return nil
+        end
+      end
+      Layout.handleEvent(self, event, p1, p2, p3, p4, p5)
+    end
+    self.dropLayout.onLoseFocus = function()
+      if not self.clicked then
+        self:close()
+      end
+    end
+    self.x = 23
+    self.y = 6
+    self.width = 16
+    self.height = 3
+    self.color = colors.gray
+    self.dropdownColor = colors.gray
+  end;
+  lasty = 1;
+  opt = Label();
+  addOption = function(self, opt)
+    local l = table.deepcopy(self.opt)
+    l.text = opt
+    l.y = self.lasty
+    l.width = self.width - 2
+    self.lasty = self.lasty + 1
+    self.dropLayout:addWidget(l)
+  end;
+  onClick = function(self, button, x, y)
+    self.clicked = true
+  end;
+  onClickUp = function(self, button, x, y, inside)
+    self.clicked = false
+    if not inside then return nil end
+    self.dropLayout.visible = not self.dropLayout.visible
+    self.open = self.dropLayout.visible
+    if self.open then
+      self.parent:addWidget(self.dropLayout)
+      self.parent.focused = self.dropLayout
+    else
+      self.parent:removeWidget(self.dropLayout)
+    end
+  end;
+  select = function(self, option)
+    for i, v in ipairs(self.dropLayout.widgets) do
+      if v == option then
+        self.text = v.text
+        self.selected = i
+        self:close()
+        self:onSelect(v.text, i)
+        break
+      end
+    end
+  end;
+  onSelect = function(self, option, id) end;
+  close = function(self)
+    self.dropLayout.visible = false
+    self.open = false
+    if self.open then
+      self.parent:addWidget(self.dropLayout)
+      self.parent.focused = self.dropLayout
+    else
+      self.parent:removeWidget(self.dropLayout)
+      self.parent.focused = self
+    end
+  end;
+  draw = function(self, canvas)
+    local x1, y1, x2, y2 = canvas:calcBounds(self.x1, self.y1, self.x2, self.y2, self.alignment, 0, 0)
+    self.bounds = {x1 = x1, y1 = y1, x2 = x2, y2 = y2}
+    rawset(self, "height", 1)
+    if self.clicked then
+      canvas:drawBox(self.bounds, self.clickedColor or self.textColor, self.alignment, #self.text)
+      canvas:drawText(self.bounds, self.text, self.clickedColor and self.textColor or self.color, self.textAlignment, self.alignment)
+      local align = self.textAlignment
+      self.textAlignment = Alignment.right
+      canvas:drawText(self.bounds, self.open and "\031" or "\016", self.clickedColor and self.textColor or self.color, self.textAlignment, self.alignment)
+      self.textAlignment = align
+    else
+      canvas:drawBox(self.bounds, self.color, self.alignment, #self.text)
+      canvas:drawText(self.bounds, self.text, self.textColor, self.textAlignment, self.alignment)
+      local align = self.textAlignment
+      self.textAlignment = Alignment.right
+      canvas:drawText(self.bounds, self.open and "\031" or "\016", self.clickedColor and self.textColor or self.color, self.textAlignment, self.alignment)
+      self.textAlignment = align
+    end
+    rawset(self, "height", nil)
+  end;
+}
+Dropdown.opt.textAlignment = 0
+Dropdown.opt.clickedColor = colors.cyan
+Dropdown.opt.textColor = colors.white
+Dropdown.opt.onClickUp = function(self, button, x, y, inside)
+  if inside then self.parent.dropdown:select(self) end
+  Label.onClickUp(self, button, x, y, inside)
+end
+]]};
+  ["gray/io/File.lua"] = {{"class.lua"}, [[class "File" {
+  File = function(self, path)
+    self.path = path or ""
+  end;
+  open = function(self, mode)
+    return fs.open(self.path, mode)
+  end;
+  readLine = function(self, line)
+    local h = fs.open(self.path, "r")
+    local str
+    for i = 1, line or 1 do
+      str = h.readLine()
+    end
+    h.close()
+    return str
+  end;
+  readAll = function(self)
+    local h = fs.open(self.path, "r")
+    local str = h.readAll()
+    h.close()
+    return str
+  end;
+  write = function(self, text)
+    local h = fs.open(self.path, "w")
+    h.write(text)
+    h.close()
+  end;
+  append = function(self, text)
+    local h = fs.open(self.path, "a")
+    h.write(text)
+    h.close()
+  end;
+  exists = function(self)
+    return fs.exists(self.path)
+  end;
+  getDir = function(self)
+    return fs.getDir(self.path)
+  end;
+  tostring = function(self)
+    return self.path
+  end;
+}
+]]};
+  ["gray/io/Stack.lua"] = {{"class.lua"}, [[class "Stack" {
+  Stack = function(self, array)
+    self.array = array or {}
+    self.pointer = 1
+  end,
+  push = function(self, ...)
+    for _, v in ipairs({...}) do
+      table.insert(self.array, v)
+    end
+  end,
+  pushAll = function(self, ...)
+    for _, v in ipairs({...}) do
+      for _, c in ipairs(v) do
+        table.insert(self.array, c)
+      end
+    end
+  end,
+  pop = function(self, pointer)
+    local p = pointer or #self.array
+    local r = self.array[p]
+    table.remove(self.array, p)
+    return r
+  end,
+  clear = function(self)
+    self.array = {}
+  end,
+  getArray = function(self)
+    return self.array
+  end
+}
+]]};
+  ["gray/ui/widget/Label.lua"] = {{"class.lua", "gray/ui/widget/Widget.lua"}, [[class "Label" extends "Widget" {
+  textColor = colors.gray;
+  clickedColor = nil;
+  textAlignment = Alignment.center;
+  clicked = false;
+  text = "";
+  Label = function(self, text)
+    self.text = text or ""
+  end;
+  handleEvent = function(self, event, p1, p2, p3, p4, p5)
+    if event == "mouse_click" and self.clickedColor then
+      self.clicked = true
+    elseif event == "mouse_up" then
+      self.clicked = false
+    end
+    Widget.handleEvent(self, event, p1, p2, p3, p4, p5)
+  end;
+  draw = function(self, canvas)
+    local x1, y1, x2, y2 = canvas:calcBounds(self.x1, self.y1, self.x2, self.y2, self.alignment, #self.text, 0)
+    self.bounds = {x1 = x1, y1 = y1, x2 = x2, y2 = y2}
+    canvas:drawBox(self.bounds, self.clicked and self.clickedColor or self.color, self.alignment)
+    canvas:drawText(self.bounds, self.text, self.textColor, self.textAlignment, self.alignment)
+  end;
+}
+]]};
+  ["gray/ui/widget/ScrollBar.lua"] = {{"class.lua", "gray/ui/widget/Widget.lua"}, [[class "ScrollBar" extends "Widget" {
+  color = colors.transparent;
+  thumbColor = colors.lightGray;
+  orientation = 1;
+  x = 1;
+  y = 1;
+  width = 1;
+  height = -1;
+  scroll = 0;
+  my = 0;
+  ScrollBar = function(self, orientation)
+    self.orientation = orientation or 1
+  end;
+  onClick = function(self, button, x, y)
+    self.my = y
+  end;
+  onDrag = function(self, button, x, y, inside)
+    local diff = y - self.my
+    if (diff < 0 and self.parent.yScroll > -diff - 1) or (diff > 0 and self.parent.yScroll <= self.parent:resolveMaxScroll() - diff) then
+      self.parent.yScroll = self.parent.yScroll + diff
+    end
+  end;
+  draw = function(self, canvas)
+    local x1, y1, x2, y2
+    local xScroll = self.parent.xScroll
+    local yScroll = self.parent.yScroll
+    local maxXScroll, maxYScroll = self.parent:resolveMaxScroll()
+    local width = self.parent.width
+    local height = self.parent.height
+    if self.orientation == 0 then
+      self.width = width
+      self.height = 1
+      x1, y1, x2, y2 = canvas:calcBounds(xScroll, yScroll + height - 1, xScroll + width + 1, yScroll + height + 1, self.alignment, 0, 0)
+      self.bounds = {x1 = x1, y1 = y1, x2 = x2, y2 = y2}
+      canvas:drawBox(self.bounds, self.color, self.alignment)
+      x1 = math.ceil(width * xScroll / width + 0.5)
+      x2 = x1 + math.floor(width - width * maxXScroll / width + 0.5)
+      x1, y1, x2, y2 = canvas:calcBounds(xScroll + x1, yScroll + height - 1, xScroll + x2, yScroll + height + 1, self.alignment, 0, 0)
+      local bounds = {x1 = x1, y1 = y1, x2 = x2, y2 = y2}
+      canvas:drawBox(bounds, colors.lightGray, self.alignment)
+    else
+      self.width = 1
+      self.height = height
+      x1, y1, x2, y2 = canvas:calcBounds(width - 1, yScroll, width + 1, yScroll + height + 1, self.alignment, 0, 0)
+      self.bounds = {x1 = x1, y1 = y1, x2 = x2, y2 = y2}
+      canvas:drawBox(self.bounds, self.color, self.alignment)
+      y1 = math.ceil(height * yScroll / height + 0.5)
+      y2 = y1 + math.floor(height - height * maxYScroll / height + 0.5)
+      x1, y1, x2, y2 = canvas:calcBounds(xScroll + width - 1, yScroll + y1, xScroll + width + 1, yScroll + y2, self.alignment, 0, 0)
+      local bounds = {x1 = x1, y1 = y1, x2 = x2, y2 = y2}
+      canvas:drawBox(bounds, colors.lightGray, self.alignment)
+    end
+  end;
+}
+]]};
+  ["gray/ui/widget/RadioButton.lua"] = {{"class.lua", "gray/ui/widget/Checkbox.lua"}, [[class "RadioButton" extends "Checkbox" {
+  RadioButton = function(self, text)
+    self.text = text or ""
+  end;
+  onClickUp = function(self, button, x, y, inside)
+    self.clicked = false
+    if inside then
+      for _, v in ipairs(self.parent.widgets) do
+        v.checked = false
+      end
+      self.checked = true
+    end
+  end;
+}
+]]};
+  ["gray/ui/widget/RadioGroup.lua"] = {{"class.lua", "gray/ui/widget/Layout.lua"}, [[class "RadioGroup" extends "Layout" { -- Just a mirror for now
+  RadioGroup = function(self)
+    self.canvas = Canvas()
+  end;
+}
+]]};
+  ["gray/math/vec3.lua"] = {{"class.lua"}, [[class "vec3" {
+  vec3 = function(self, x, y, z)
+    self.x = x or 0
+    self.y = y or 0
+    self.z = z or 0
+  end;
+  dot = function(self, o)
+    return self.x * o.x + self.y * o.y + self.z * o.z
+  end;
+  cross = function(self, o)
+    return vec3(
+      self.y * o.z - self.z * o.y,
+      self.z * o.x - self.x * o.z,
+      self.x * o.y - self.y * o.x
+    )
+  end;
+  __length = function(self)
+    return math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
+  end;
+  normalize = function(self)
+    return self * 1 / #self
+  end;
+  round = function(self, nTolerance)
+      nTolerance = nTolerance or 1
+      return vec3(
+        math.floor((self.x + (nTolerance * 0.5)) / nTolerance) * nTolerance,
+        math.floor((self.y + (nTolerance * 0.5)) / nTolerance) * nTolerance,
+        math.floor((self.z + (nTolerance * 0.5)) / nTolerance) * nTolerance
+      )
+  end;
+  __index = function(self, h)
+    if h == 1 then
+      return self.x
+    elseif h == 2 then
+      return self.y
+    elseif h == 3 then
+      return self.z
+    end
+  end;
+  __tostring = function(self)
+    return self.x .. ", " .. self.y .. ", " .. self.z
+  end;
+  __add = function(self, o)
+    if type(o) == "table" then
+      return vec3(
+        self.x + o.x,
+        self.y + o.y,
+        self.z + o.z
+      )
+    elseif type(o) == "number" then
+      return vec3(
+        self.x + o,
+        self.y + o,
+        self.z + o
+      )
+    end
+  end;
+  __sub = function( self, o )
+    if type(o) == "table" then
+      return vec3(
+        self.x - o.x,
+        self.y - o.y,
+        self.z - o.z
+      )
+    elseif type(o) == "number" then
+      return vec3(
+        self.x - o,
+        self.y - o,
+        self.z - o
+      )
+    end
+  end;
+  __mul = function( self, m )
+    if type(m) == "table" and m.x then
+      return vec3(
+        self.x * m.x,
+        self.y * m.y,
+        self.z * m.z
+      )
+    elseif type(m) == "number" then
+      return vec3(
+        self.x * m,
+        self.y * m,
+        self.z * m
+      )
+    end
+  end;
+  __div = function( self, m )
+    if type(m) == "table" then
+      return vec3(
+        self.x / m.x,
+        self.y / m.y,
+        self.z / m.z
+      )
+    elseif type(m) == "number" then
+      return vec3(
+        self.x / m,
+        self.y / m,
+        self.z / m
+      )
+    end
+  end;
+  __unm = function( self )
+    return vec3(
+      -self.x,
+      -self.y,
+      -self.z
+    )
+  end;
+}
+]]};
+  ["gray/app/Application.lua"] = {{"class.lua", "gray/graphics/Canvas.lua", "gray/util/Coroutine.lua"}, [[class "Application" {
+  instance;
+  init = function(self) end;
+  update = function(self) end;
+  run = function(self)
+    self:init()
+    self.contentView:init()
+    parallel.waitForAny(function()
+      while true do
+        local event, p1, p2, p3, p4, p5 = os.pullEvent()
+        if event == "mouse_scroll" or event == "mouse_click" or event == "mouse_up" or event == "mouse_scroll" then
+          if p2 >= self.contentView.x1 and p3 >= self.contentView.y1 and p2 < self.contentView.x2 and p3 < self.contentView.y2 then
+            self.contentView:handleEvent(event, p1, p2, p3, p4, p5)
+          end
+        else
+          self.contentView:handleEvent(event, p1, p2, p3, p4, p5)
+        end
+      end
+    end, function()
+      while true do
+        os.sleep(0)
+        Application.instance = self;
+        AppCanvas.clear()
+        Coroutine.step()
+        self:update()
+        self.contentView:update()
+        self.contentView:draw()
+        AppCanvas.redraw()
+      end
+    end)
+  end;
+}
+]]};
+  ["gray/util/Animation.lua"] = {{"class.lua", "gray/util/Coroutine.lua"}, [[function math.interpolate(v1, v2, progress)
+  return v1 + (v2 - v1) * progress
+end
+class "Animation" {
+  Animation = function(self, min, max, duration, target, index)
+    self.value = min or 0
+    self.min = min or 0
+    self.max = max or 0
+    self.target = target
+    self.index = index
+    self.duration = duration or 0
+    self.finished = false
+  end;
+  play = function(self, duration)
+    Coroutine(function()
+      if not duration then duration = self.duration end
+      self.finished = false
+      local t = os.clock()
+      while os.clock() - t <= duration do
+        self.value = math.interpolate(self.min, self.max, (os.clock() - t) / duration)
+        if type(self.index) == "table" then
+          for _, v in ipairs(self.index) do
+            self.target[v] = self.value
+          end
+        elseif self.index then
+          self.target[self.index] = self.value
+        else
+          self.target = self.value
+        end
+        Coroutine.yield()
+      end
+      self.finished = true
+    end):start()
+  end;
+}
+]]};
+  ["gray/ui/widget/ScrollLayout.lua"] = {{"class.lua", "gray/ui/widget/Layout.lua"}, [[class "ScrollLayout" extends "Layout" {
+  widgets = {};
+  width = -1;
+  height = -1;
+  xScroll = 0;
+  yScroll = 0;
+  orientation = 1;
+  canvas;
+  ScrollLayout = function(self, orientation)
+    self.canvas = Canvas()
+    self.orientation = orientation or 1
+  end;
+  handleEvent = function(self, event, p1, p2, p3, p4, p5)
+    if event == "mouse_scroll" then
+      if p1 < 0 and self.yScroll > 0 then
+        self.yScroll = self.yScroll + p1
+        return nil
+      elseif p1 > 0 and self.yScroll < self:resolveMaxYScroll() then
+        self.yScroll = self.yScroll + p1
+        return nil
+      end
+    end
+    Layout.handleEvent(self, event, p1, p2, p3, p4, p5)
+  end;
+  resolveMaxScroll = function(self)
+    local xScroll = 0
+    local yScroll = 0
+    for _, w in ipairs(self.widgets) do
+      if w.x + w.width > self.width + xScroll then
+        xScroll = w.x + w.width - self.width - xScroll + 1
+      end
+      if w.y + w.height > self.height + yScroll then
+        yScroll = w.y + w.height - self.height - yScroll + 1
+      end
+    end
+    return xScroll, yScroll
+  end;
+  resolveMaxXScroll = function(self)
+    local rscroll = 0
+    for _, w in ipairs(self.widgets) do
+      if w.y + w.height > self.height + rscroll then
+        rscroll = w.y + w.height - self.height - rscroll + 1
+      end
+    end
+    return rscroll
+  end;
+  resolveMaxYScroll = function(self)
+    local rscroll = 0
+    for _, w in ipairs(self.widgets) do
+      if w.y + w.height > self.height + rscroll then
+        rscroll = w.y + w.height - self.height - rscroll + 1
+      end
+    end
+    return rscroll
+  end;
+  draw = function(self, canvas)
+    if not canvas then canvas = AppCanvas end
+    self.canvas.x1, self.canvas.y1, self.canvas.x2, self.canvas.y2 = canvas:calcBounds(self.x1, self.y1, self.x2 - 1, self.y2, self.alignment, 0, 0)
+    self.canvas.width = self.canvas.x2 - self.canvas.x1
+    self.canvas.height = self.canvas.y2 - self.canvas.y1
+    self.bounds = self.canvas
+    self.canvas.yScroll = canvas.vscroll
+    self.canvas:drawBox(self.bounds, self.color, self.alignment)
+    self.canvas.yScroll = self.yScroll + canvas.yScroll
+    for _, w in ipairs(self.widgets) do
+      w:draw(self.canvas)
+    end
+  end;
+}
+]]};
+  ["gray/ui/widget/Checkbox.lua"] = {{"class.lua", "gray/ui/widget/Widget.lua"}, [[class "Checkbox" extends "Widget" {
+  textAlignment = Alignment.left;
+  textColor = colors.lightGray;
+  clickedColor = nil;
+  checkedColor = colors.lightGray;
+  crossColor = colors.white;
+  color = colors.gray;
+  checked = false;
+  width = 1;
+  height = 1;
+  text = "";
+  Checkbox = function(self, text)
+    self.text = text or ""
+  end;
+  onClick = function(self, button, x, y)
+    self.clicked = true
+  end;
+  onClickUp = function(self, button, x, y, inside)
+    self.clicked = false
+    if inside then
+      self.checked = not self.checked
+    end
+  end;
+  draw = function(self, canvas)
+    local x1, y1, x2, y2 = canvas:calcBounds(self.x1, self.y1, self.x2, self.y2, self.alignment, 0, 0)
+    self.bounds = {x1 = x1, y1 = y1, x2 = x2, y2 = y2}
+    canvas:drawBox(self.bounds, self.clicked and (self.clickedColor or self.crossColor) or self.checked and self.checkedColor or self.color, self.alignment)
+    if self.checked then
+      canvas:drawText(self.bounds, "x", self.clicked and self.checkedColor or self.crossColor, Alignment.center, self.alignment, 0, 0, 0)
+    end
+    local x1 = 0
+    local x2 = 0
+    if self.textAlignment == Alignment.left then
+      x1 = self.x - #self.text - 1
+      x2 = x1 + #self.text + 2
+    elseif self.textAlignment == Alignment.right then
+      x2 = self.x + #self.text + 2
+    end
+    local x1, y1, x2, y2 = canvas:calcBounds(x1, self.y1, x2, self.y2, self.alignment, 0, 0)
+    local bounds = {x1 = x1, y1 = y1, x2 = x2, y2 = y2}
+    canvas:drawText(bounds, self.text, self.textColor, self.textAlignment, self.alignment, 0, 0, 0)
+    --if self.textAlignment == Alignment.left then
+    --  self.x = self.x + #self.text + 1
+    --end
+  end;
+}
+]]};
+  ["gray/ui/widget/Layout.lua"] = {{"class.lua", "gray/graphics/Canvas.lua", "gray/ui/widget/Widget.lua"}, [[class "Layout" extends "Widget" {
+  widgets = {};
+  width = -1;
+  height = -1;
+  canvas;
+  Layout = function(self)
+    self.canvas = Canvas()
+  end;
+  addWidget = function(self, widget)
+    widget.parent = self
+    table.insert(self.widgets, widget)
+  end;
+  removeWidget = function(self, widget)
+    for i, v in ipairs(self.widgets) do
+      if v == widget then
+        table.remove(self.widgets, i)
+        break
+      end
+    end
+  end;
+  init = function(self)
+    for _, w in ipairs(self.widgets) do
+      w:init()
+    end
+  end;
+  update = function(self)
+    for _, w in ipairs(self.widgets) do
+      w:update()
+    end
+  end;
+  handleEvent = function(self, event, p1, p2, p3, p4, p5)
+    for i = #self.widgets, 1, -1 do
+      local w = self.widgets[i]
+      if event == "mouse_click" then
+        if p2 >= w.bounds.x1 and p2 < w.bounds.x2 and p3 >= w.bounds.y1 and p3 < w.bounds.y2 then
+          w:handleEvent(event, p1, p2, p3)
+          if self.focused ~= w then
+            if self.focused then self.focused:onLoseFocus() end
+            self.focused = w
+            w:onFocus()
+          end
+          break
+        elseif self.focused == w then
+          w:onLoseFocus()
+          self.focused = nil
+        end
+      elseif event == "mouse_up" or event == "mouse_drag" then
+        if self.focused then
+          self.focused:handleEvent(event, p1, p2, p3, p2 >= self.focused.bounds.x1 and p2 < self.focused.bounds.x2 and p3 >= self.focused.bounds.y1 and p3 < self.focused.bounds.y2)
+          break
+        end
+      elseif event == "mouse_scroll" and p2 >= w.bounds.x1 and p2 <= w.bounds.x2 and p3 >= w.bounds.y1 and p3 <= w.bounds.y2 then
+        w:handleEvent(event, p1, p2, p3)
+        break
+      elseif event == "key" and self.focused == w then
+        w:handleEvent(event, p1, p2)
+        break
+      elseif event == "key_up" and self.focused == w then
+        w:handleEvent(event, p1)
+        break
+      elseif event == "char" and self.focused == w then
+        w:handleEvent(event, p1)
+        break
+      end
+    end
+  end;
+  onLoseFocus = function(self)
+    if self.focused then self.focused:onLoseFocus() end
+    self.focused = nil
+  end;
+  draw = function(self, canvas)
+    if not canvas then canvas = AppCanvas end
+    self.canvas.x1, self.canvas.y1, self.canvas.x2, self.canvas.y2 = canvas:calcBounds(self.x1, self.y1, self.x2, self.y2, self.alignment, 0, 0)
+    self.canvas.width = self.canvas.x2 - self.canvas.x1
+    self.canvas.height = self.canvas.y2 - self.canvas.y1
+    self.canvas.vscroll = canvas.vscroll
+    self.bounds = self.canvas
+    self.canvas:drawBox(self.bounds, self.color, self.alignment)
+    for _, w in ipairs(self.widgets) do
+      w:draw(self.canvas)
+    end
+  end;
+}
+]]};
+  ["gray/math/quaternion.lua"] = {{"class.lua"}, [[class "quaternion" { -- WARNING: Outdated
+  quaternion = function(a, b, c, d)
+    local q = {
+      a = a or 0,
+      b = b or 0,
+      c = c or 0,
+      d = d or 0,
+      conjugate = function(self)
+        return quaternion(self.a, -self.b, -self.c, -self.d)
+      end,
+      toVector = function(self)
+        return vec3(b, c, d)
+      end
+    }
+    setmetatable(q, {
+      __add = function(self, q)
+        return quaternion(self.a + q.a, self.b + q.b, self.c + q.c, self.d + q.d)
+      end,
+      __sub = function(self, q)
+        return quaternion(self.a - q.a, self.b - q.b, self.c - q.c, self.d - q.d)
+      end,
+      __mul = function(self, q)
+        local a, b, c, d
+        a = self.a * q.a - self.b * q.b - self.c * q.c - self.d * q.d
+        b = self.a * q.b + self.b * q.a + self.c * q.d - self.d * q.c
+        c = self.a * q.c - self.b * q.d + self.c * q.a + self.d * q.b
+        d = self.a * q.d + self.b * q.c - self.c * q.b + self.d * q.a
+        return quaternion(a, b, c, d)
+      end,
+      __div = function(self, q)
+        local length = 1 / #q
+        local conjugate = q:conjugate()
+        local reciprocal = quaternion(conjugate.a * length, conjugate.b * length, conjugate.c * length, conjugate.d * length)
+        return self * reciprocal
+      end,
+      __unm = function(self)
+        return quaternion(-self.a, -self.b, -self.c, -self.d)
+      end,
+      __len = function(self)
+        return math.pow(self.a, 2) + math.pow(self.b, 2) + math.pow(self.c, 2) + math.pow(self.d, 2)
+      end
+    })
+    return q
+  end,
+  fromVector = function(vec)
+    return quaternion(0, vec.x, vec.y, vec.z)
+  end
+}
+]]};
+  ["gray/system/Window.lua"] = {{"class.lua"}, [[class "Window" {
+  x = 1;
+  y = 1;
+  width = 0;
+  height = 0;
+  buttons = {{"_", colors.lightGray}, {"=", colors.lightGray}, {"x", colors.red}};
+  term;
+  Window = function(self, parent)
+    self.term = window.create(parent and (parent.term or parent) or term.native(), 1, 1, 0, 0, true, self)
+  end;
+  removeAllButtons = function(self)
+    self.buttons = {};
+  end;
+  removeButton = function(self, button)
+    if type(button) == "string" then
+      for i, v in ipairs(self.buttons) do
+        if v[1] == button then
+          table.remove(self.buttons, i)
+          break
+        end
+      end
+    elseif type(button) == "number" then
+      table.remove(self.buttons, button)
+    elseif type(button) == "table" then
+      for i, v in ipairs(self.buttons) do
+        if v == button then
+          table.remove(self.buttons, i)
+          break
+        end
+      end
+    end
+  end;
+  addButton = function(self, text, color)
+    table.insert(self.buttons, {text, color})
+  end;
+  setVisible = function(self, visible)
+    self.term.setVisible(visible)
+  end;
+  redirect = function(self)
+    term.redirect(self.term)
+  end;
+  reposition = function(self, x, y, width, height)
+    self.term.reposition(x, y, width or self.width, height or self.height)
+    self.x = x
+    self.y = y
+    self.width = width
+    self.height = height
+  end;
+  resize = function(self, width, height)
+    self.term.reposition(nil, nil, width, height)
+    self.width = width
+    self.height = height
+  end;
+  close = function(self)
+    if self.term.close then
+      self.term.close()
+    else
+      self.term.setVisible(false)
+    end
+    self.term = nil
+  end;
+  -- Callbacks
+  onReposition = function(self, x, y) end;
+  onResize = function(self, width, height) end;
+  onButton = function(self, id, button) end;
+}
+]]};
+}
